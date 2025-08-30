@@ -767,7 +767,10 @@ const handler: Handler = async (event: HandlerEvent, context: HandlerContext) =>
                     controller.close();
                 }
             });
-            return { statusCode: 200, body };
+            // FIX: Cast the streaming response to 'any' to satisfy the Handler type.
+            // The Netlify Functions runtime supports ReadableStream in the body, but the @netlify/functions types expect a string.
+            // This assertion tells TypeScript that we are intentionally returning a stream, which is valid for the runtime.
+            return { statusCode: 200, body } as any;
         }
 
         let result;
