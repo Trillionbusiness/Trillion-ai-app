@@ -1,6 +1,11 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import JSZip from 'jszip';
+import { Auth } from '@supabase/auth-ui-react';
+import { ThemeSupa } from '@supabase/auth-ui-shared';
+import { supabase } from './services/supabaseClient';
+// FIX: Changed from a type-only import to a standard import to resolve potential module resolution issues with older library versions.
+import { Session } from '@supabase/supabase-js';
+
 import { BusinessData, GeneratedPlaybook, OfferStackItem, GeneratedOffer, ChatMessage } from './types';
 import { 
     generateDiagnosis, generateMoneyModelAnalysis, generateMoneyModel, 
@@ -18,8 +23,11 @@ import DropdownButton from './components/common/DropdownButton';
 import AllPdfs from './components/pdf/AllPdfs';
 import OfferPreviewModal from './components/OfferPreviewModal';
 import VideoPlayerModal from './components/VideoPlayerModal';
+import Card from './components/common/Card';
+
 
 const App: React.FC = () => {
+  const [session, setSession] = useState<Session | null>(null);
   const [step, setStep] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -51,6 +59,24 @@ const App: React.FC = () => {
   const pdfSingleRenderRef = useRef<HTMLDivElement>(null);
   const pdfAssetRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    // FIX: The errors suggest an older version of supabase-js is being used.
+    // This code is updated to use the older, synchronous `supabase.auth.session()` to get the initial session.
+    setSession(supabase.auth.session());
+
+    // FIX: The structure of the returned object from `onAuthStateChange` was different in older versions.
+    // This corrects the destructuring to `{ data: subscription }` instead of `{ data: { subscription } }`.
+    const { data: subscription } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, []);
+
   const handleFormSubmit = useCallback(async (data: BusinessData) => {
     setIsLoading(true);
     setError(null);
@@ -81,8 +107,19 @@ const App: React.FC = () => {
             fullPlaybook[steps[i].key] = await steps[i].fn();
             setLoadingProgress(((i + 1) / steps.length) * 100);
         }
+        
+        setLoadingText('Saving your plan...');
+        const finalPlaybook = fullPlaybook as GeneratedPlaybook;
+        const { error: saveError } = await supabase
+            .from('playbooks')
+            .insert([{ playbook_data: finalPlaybook }]); // user_id is set by default in the DB
 
-        setPlaybook(fullPlaybook as GeneratedPlaybook);
+        if (saveError) {
+            console.error("Error saving playbook to Supabase:", saveError);
+            throw new Error(`Your plan was generated but could not be saved to your account. Error: ${saveError.message}`);
+        }
+
+        setPlaybook(finalPlaybook);
         setLoadingText('Plan Complete!');
         setStep(2);
 
@@ -542,163 +579,4 @@ const App: React.FC = () => {
       }
 
       if (!sourceElement) {
-        setError('Could not find content for PDF.');
-        setIsGeneratingPdf(false);
-        setPdfType(null); setAssetForPdf(null); setGeneratingAsset(null); setAssetBundleForPdf(null); setGeneratingAssetBundleFor(null);
-        return;
-      }
-
-      const { jsPDF } = (window as any).jspdf;
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      
-      try {
-        await pdf.html(sourceElement, {
-          callback: (doc) => {
-            setPdfProgress(100);
-            doc.save(`${fileName}.pdf`);
-            setIsGeneratingPdf(false);
-            setPdfType(null); setAssetForPdf(null); setGeneratingAsset(null); setAssetBundleForPdf(null); setGeneratingAssetBundleFor(null);
-          },
-          autoPaging: 'text',
-          x: 0, y: 0,
-          width: 210, windowWidth: 800, margin: 0
-        });
-      } catch (err) {
-        setError(err instanceof Error ? `PDF Generation Failed: ${err.message}` : 'An unknown error occurred during PDF generation.');
-        setIsGeneratingPdf(false);
-        setPdfType(null); setAssetForPdf(null); setGeneratingAsset(null); setAssetBundleForPdf(null); setGeneratingAssetBundleFor(null);
-      }
-    };
-    
-    generatePdf();
-  }, [pdfType, assetForPdf, assetBundleForPdf, isGeneratingPdf, playbook]);
-
-  const downloadOptions = playbook ? [
-    { label: 'The Full Plan (PDF)', onClick: () => prepareAndDownloadPdf('full') },
-    { label: 'The $100M Money Models Guide', onClick: () => prepareAndDownloadPdf('money-models-guide') },
-    { label: 'Explain The Concepts (PDF)', onClick: () => prepareAndDownloadPdf('concepts-guide') },
-    { label: 'Your Business Scorecard (KPIs)', onClick: () => prepareAndDownloadPdf('kpi-dashboard') },
-    { label: 'A High-Converting Web Page', onClick: () => prepareAndDownloadPdf('landing-page') },
-    { label: 'A Presentation For Your Offer', onClick: () => prepareAndDownloadPdf('offer-presentation') },
-    { label: 'A Simple Offer Flyer', onClick: () => prepareAndDownloadPdf('downsell-pamphlet') },
-    { label: 'A Follow-Up Note', onClick: () => prepareAndDownloadPdf('tripwire-followup') },
-    { label: 'Your Money-Making Plan', onClick: () => prepareAndDownloadPdf('cfa-model') },
-    { label: 'Offline Dashboard (HTML)', onClick: handleDownloadHtmlPage },
-  ] : [];
-
-  const anyFileGenerationInProgress = isGeneratingPdf || isZipping || isVideoGenerating;
-
-  return (
-    <>
-      {assetToPreview && assetToPreview.asset && (
-        <OfferPreviewModal 
-            asset={assetToPreview.asset} 
-            onClose={() => setAssetToPreview(null)} 
-        />
-      )}
-      {generatedVideoUrl && (
-        <VideoPlayerModal 
-            videoUrl={generatedVideoUrl} 
-            onClose={() => setGeneratedVideoUrl(null)}
-        />
-      )}
-      <div className="flex flex-col items-center p-4 sm:p-6 md:p-8">
-        <header className="w-full max-w-5xl text-center mb-8">
-          <h1 className="text-4xl md:text-5xl font-black text-white tracking-tighter">
-            The <span className="text-yellow-400">Hormozi</span> AI
-          </h1>
-          <p className="text-gray-400 mt-2">Your Simple Path to Business Growth.</p>
-        </header>
-        
-        <main className="w-full max-w-5xl">
-          {isLoading && <ProgressBar progress={loadingProgress} loadingText={loadingText} />}
-          {isVideoGenerating && <ProgressBar progress={videoGenerationProgress} loadingText={videoGenerationText} />}
-          {error && (
-              <div className="bg-red-900/50 border border-red-700 text-red-200 p-4 rounded-lg text-center">
-                  <p className="font-bold">Something went wrong.</p>
-                  <p className="mt-2 text-sm">{error}</p>
-                  <button 
-                    onClick={resetApp}
-                    className="mt-4 px-4 py-2 bg-yellow-400 text-gray-900 font-bold rounded-md hover:bg-yellow-300 transition-colors"
-                  >
-                    Start Again
-                  </button>
-              </div>
-          )}
-
-          {!isLoading && !error && (
-            <>
-              {step === 1 && <Step1Form onSubmit={handleFormSubmit} />}
-              {playbook && (
-                <div className="space-y-12">
-                  <FullPlaybook 
-                    playbook={playbook} 
-                    onDownloadAsset={prepareAndDownloadAssetPdf}
-                    isAnyPdfGenerating={anyFileGenerationInProgress}
-                    generatingAsset={generatingAsset}
-                    onDownloadAllAssets={prepareAndDownloadAssetBundlePdf}
-                    generatingAssetBundleFor={generatingAssetBundleFor}
-                    chatHistory={chatHistory}
-                    isChatLoading={isChatLoading}
-                    onSendMessage={handleSendMessage}
-                    pdfProgress={pdfProgress}
-                    onPreviewAsset={handlePreviewAsset}
-                  />
-                  <div id="playbook-actions" className="text-center mt-12 flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap">
-                     <button 
-                      onClick={resetApp}
-                      disabled={anyFileGenerationInProgress}
-                      className="w-full sm:w-auto px-8 py-3 bg-yellow-400 text-gray-900 font-bold rounded-lg hover:bg-yellow-300 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Start New Plan
-                    </button>
-                    <button 
-                      onClick={handleGenerateVideoOverview}
-                      disabled={anyFileGenerationInProgress}
-                      className="w-full sm:w-auto px-8 py-3 bg-indigo-500 text-white font-bold rounded-lg hover:bg-indigo-400 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
-                      style={{minWidth: '180px', minHeight: '52px'}}
-                    >
-                      {isVideoGenerating ? 'Creating Video...' : 'Generate Video Overview'}
-                    </button>
-                     <button 
-                      onClick={handleDownloadAll}
-                      disabled={anyFileGenerationInProgress}
-                      className="w-full sm:w-auto px-8 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-400 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center"
-                      style={{minWidth: '180px', minHeight: '52px'}}
-                    >
-                      {isZipping ? <CircularProgress progress={zipProgress} /> : 'Download All (ZIP)'}
-                    </button>
-                    <DropdownButton
-                      label="Download Files"
-                      options={downloadOptions}
-                      isLoading={(isGeneratingPdf && !!pdfType)}
-                      progress={pdfProgress}
-                    />
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </main>
-        
-        <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1 }}>
-            <div ref={pdfSingleRenderRef} className="w-[800px]">
-                {playbook && businessData && <AllPdfs playbook={playbook} businessData={businessData} type={pdfType} assetBundle={assetBundleForPdf} />}
-            </div>
-            {assetForPdf && playbook && businessData && (
-              <div ref={pdfAssetRef} className="w-[800px]">
-                 <AllPdfs playbook={playbook} businessData={businessData} type="single-asset" singleAsset={assetForPdf} />
-              </div>
-            )}
-            {showAllPdfsForZip && processedPlaybookForZip && businessData && <AllPdfs playbook={processedPlaybookForZip} businessData={businessData} type="all" />}
-        </div>
-
-        <footer className="w-full max-w-5xl text-center mt-12 text-gray-500 text-sm">
-          <p>This AI provides ideas from Alex Hormozi's books for education. Please talk to a professional for major financial or legal decisions.</p>
-        </footer>
-      </div>
-    </>
-  );
-};
-
-export default App;
+        setError('Could not find content
