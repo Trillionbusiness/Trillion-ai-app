@@ -1,9 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import JSZip from 'jszip';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { supabase } from './services/supabaseClient';
-import type { Session } from '@supabase/supabase-js';
 
 import { BusinessData, GeneratedPlaybook, OfferStackItem, GeneratedOffer, ChatMessage } from './types';
 import { 
@@ -26,7 +22,6 @@ import Card from './components/common/Card';
 
 
 const App: React.FC = () => {
-  const [session, setSession] = useState<Session | null>(null);
   const [step, setStep] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
@@ -57,22 +52,6 @@ const App: React.FC = () => {
 
   const pdfSingleRenderRef = useRef<HTMLDivElement>(null);
   const pdfAssetRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => {
-      subscription?.unsubscribe();
-    };
-  }, []);
 
   const handleFormSubmit = useCallback(async (data: BusinessData) => {
     setIsLoading(true);
@@ -105,16 +84,8 @@ const App: React.FC = () => {
             setLoadingProgress(((i + 1) / steps.length) * 100);
         }
         
-        setLoadingText('Saving your plan...');
+        setLoadingText('Finalizing your plan...');
         const finalPlaybook = fullPlaybook as GeneratedPlaybook;
-        const { error: saveError } = await supabase
-            .from('playbooks')
-            .insert([{ playbook_data: finalPlaybook }]); // user_id is set by default in the DB
-
-        if (saveError) {
-            console.error("Error saving playbook to Supabase:", saveError);
-            throw new Error(`Your plan was generated but could not be saved to your account. Error: ${saveError.message}`);
-        }
 
         setPlaybook(finalPlaybook);
         setLoadingText('Plan Complete!');
@@ -614,27 +585,6 @@ const App: React.FC = () => {
 
     generatePdf();
   }, [isGeneratingPdf, pdfType, assetForPdf, assetBundleForPdf, playbook]);
-  
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-900">
-        <div className="w-full max-w-md">
-            <Card className="bg-gray-800 border-gray-700">
-                <div className="text-center mb-8">
-                    <h1 className="text-2xl font-bold text-white">Hormozi AI Business Plan</h1>
-                    <p className="text-gray-400 mt-2">Log in or sign up to create and save your plans.</p>
-                </div>
-                <Auth
-                    supabaseClient={supabase}
-                    appearance={{ theme: ThemeSupa }}
-                    theme="dark"
-                    providers={[]}
-                />
-            </Card>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
