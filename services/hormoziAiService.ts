@@ -17,14 +17,33 @@ async function generate<T>(action: string, payload: any): Promise<T> {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || `Request failed with status ${response.status}`);
+            const errorText = await response.text();
+            try {
+                // Attempt to parse as JSON, as our function should return JSON errors
+                const errorData = JSON.parse(errorText);
+                throw new Error(errorData.error || `Request failed with status ${response.status}`);
+            } catch (e) {
+                // If parsing fails, it's likely a gateway timeout or other non-JSON error
+                throw new Error(errorText || `Request failed with status ${response.status}`);
+            }
         }
 
-        return await response.json() as T;
+        const responseText = await response.text();
+        if (!responseText) {
+            throw new Error("Received an empty response from the server. This may be due to a function timeout.");
+        }
+        
+        try {
+            return JSON.parse(responseText) as T;
+        } catch(e) {
+            console.error("Failed to parse successful response as JSON:", responseText);
+            throw new Error("Received an invalid response from the server.");
+        }
+
     } catch (e) {
         console.error(`AI Generation Error for action "${action}":`, e);
         if (e instanceof Error) {
+            // Re-wrap the error to provide a consistent message format to the UI
             throw new Error(`Failed to generate content: ${e.message}`);
         }
         throw new Error("An unknown error occurred during AI generation.");
@@ -39,8 +58,13 @@ async function generateStream(action: string, payload: any) {
     });
 
     if (!response.ok || !response.body) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        const errorText = await response.text();
+        try {
+            const errorData = JSON.parse(errorText);
+            throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        } catch (e) {
+            throw new Error(errorText || `Request failed with status ${response.status}`);
+        }
     }
 
     const reader = response.body.getReader();
