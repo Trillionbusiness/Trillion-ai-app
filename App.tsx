@@ -3,8 +3,7 @@ import JSZip from 'jszip';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from './services/supabaseClient';
-// FIX: Changed from a type-only import to a standard import to resolve potential module resolution issues with older library versions.
-import { Session } from '@supabase/supabase-js';
+import type { Session } from '@supabase/supabase-js';
 
 import { BusinessData, GeneratedPlaybook, OfferStackItem, GeneratedOffer, ChatMessage } from './types';
 import { 
@@ -60,17 +59,15 @@ const App: React.FC = () => {
   const pdfAssetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // FIX: The errors suggest an older version of supabase-js is being used.
-    // This code is updated to use the older, synchronous `supabase.auth.session()` to get the initial session.
-    setSession(supabase.auth.session());
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
 
-    // FIX: The structure of the returned object from `onAuthStateChange` was different in older versions.
-    // This corrects the destructuring to `{ data: subscription }` instead of `{ data: { subscription } }`.
-    const { data: subscription } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-      }
-    );
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
 
     return () => {
       subscription?.unsubscribe();
@@ -579,4 +576,202 @@ const App: React.FC = () => {
       }
 
       if (!sourceElement) {
-        setError('Could not find content
+        setError('Could not find content to generate PDF from.');
+        setIsGeneratingPdf(false);
+        setPdfType(null);
+        setAssetForPdf(null);
+        setGeneratingAsset(null);
+        setAssetBundleForPdf(null);
+        setGeneratingAssetBundleFor(null);
+        return;
+      }
+
+      const { jsPDF } = (window as any).jspdf;
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+      
+      pdf.html(sourceElement, {
+        autoPaging: 'text',
+        x: 0,
+        y: 0,
+        width: 210, // A4 width
+        windowWidth: 800,
+        margin: 0,
+        callback: function(doc: any) {
+          doc.save(`${fileName}.pdf`);
+          setPdfProgress(100);
+          // Reset state after a short delay
+          setTimeout(() => {
+            setIsGeneratingPdf(false);
+            setPdfType(null);
+            setAssetForPdf(null);
+            setGeneratingAsset(null);
+            setAssetBundleForPdf(null);
+            setGeneratingAssetBundleFor(null);
+          }, 500);
+        }
+      });
+    };
+
+    generatePdf();
+  }, [isGeneratingPdf, pdfType, assetForPdf, assetBundleForPdf, playbook]);
+  
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gray-900">
+        <div className="w-full max-w-md">
+            <Card className="bg-gray-800 border-gray-700">
+                <div className="text-center mb-8">
+                    <h1 className="text-2xl font-bold text-white">Hormozi AI Business Plan</h1>
+                    <p className="text-gray-400 mt-2">Log in or sign up to create and save your plans.</p>
+                </div>
+                <Auth
+                    supabaseClient={supabase}
+                    appearance={{ theme: ThemeSupa }}
+                    theme="dark"
+                    providers={[]}
+                />
+            </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-lg text-center">
+            <h2 className="text-3xl font-black text-white mb-4">Building Your Plan...</h2>
+            <p className="text-gray-400 mb-8">Your AI assistant is analyzing your business and crafting your custom growth plan. This might take a moment.</p>
+            <ProgressBar progress={loadingProgress} loadingText={loadingText} />
+        </div>
+      </div>
+    );
+  }
+  
+  if (error) {
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 text-center">
+            <Card>
+                <h2 className="text-2xl font-bold text-red-400 mb-4">An Error Occurred</h2>
+                <p className="text-gray-300 bg-gray-900 p-4 rounded-md">{error}</p>
+                <button 
+                    onClick={resetApp}
+                    className="mt-6 px-6 py-2 bg-yellow-400 text-gray-900 font-bold rounded-lg hover:bg-yellow-300 transition-colors"
+                >
+                    Start Over
+                </button>
+            </Card>
+        </div>
+    );
+  }
+
+  if (step === 2 && playbook && businessData) {
+      return (
+          <div className="p-4 md:p-8">
+              {isZipping && (
+                <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50 p-4 text-center">
+                   <h2 className="text-3xl font-black text-white mb-4">Preparing Your Download...</h2>
+                   <p className="text-gray-400 mb-8 max-w-lg">{zipProgress < 50 ? 'First, your AI is generating all the custom asset content for your offers...' : 'Now, all your documents are being compiled into a single ZIP file...'}</p>
+                   <div className="w-full max-w-lg">
+                      <ProgressBar progress={zipProgress} loadingText={zipProgress < 50 ? 'Generating Assets' : 'Creating Zip File'} />
+                   </div>
+                </div>
+              )}
+              {showAllPdfsForZip && processedPlaybookForZip && <div className="opacity-0 absolute -z-10"><AllPdfs playbook={processedPlaybookForZip} businessData={businessData} type="all" /></div>}
+              
+              <div ref={pdfSingleRenderRef} className={isGeneratingPdf && (pdfType || assetBundleForPdf) ? 'fixed top-0 left-0 -z-10 opacity-0' : 'hidden'}>
+                {playbook && businessData && (pdfType || assetBundleForPdf) && <AllPdfs playbook={playbook} businessData={businessData} type={pdfType} assetBundle={assetBundleForPdf} />}
+              </div>
+              <div ref={pdfAssetRef} className={isGeneratingPdf && assetForPdf ? 'fixed top-0 left-0 -z-10 opacity-0' : 'hidden'}>
+                {assetForPdf && <AllPdfs playbook={playbook} businessData={businessData} type={null} singleAsset={assetForPdf} />}
+              </div>
+              {assetToPreview && <OfferPreviewModal asset={assetToPreview.asset!} onClose={() => setAssetToPreview(null)} />}
+              {generatedVideoUrl && <VideoPlayerModal videoUrl={generatedVideoUrl} onClose={() => setGeneratedVideoUrl(null)} />}
+              {isVideoGenerating && (
+                 <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50 p-4 text-center">
+                   <h2 className="text-3xl font-black text-white mb-4">Generating Your Video Overview...</h2>
+                   <p className="text-gray-400 mb-8 max-w-lg">{videoGenerationText}</p>
+                   <div className="w-full max-w-lg">
+                      <ProgressBar progress={videoGenerationProgress} loadingText={videoGenerationText} />
+                   </div>
+                </div>
+              )}
+
+
+              <div className="max-w-7xl mx-auto">
+                  <header className="text-center mb-12">
+                      <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">Your <span className="text-yellow-400">Super Simple</span> Business Plan</h1>
+                      <p className="text-gray-400 mt-4 max-w-3xl mx-auto">This is your complete growth plan. Use the sections below to understand the strategy, and use the download buttons to get your ready-to-use assets.</p>
+                      <div className="mt-8 flex flex-wrap gap-4 items-center justify-center">
+                          <button 
+                              onClick={resetApp}
+                              className="px-6 py-3 bg-gray-700 text-yellow-300 font-bold rounded-lg hover:bg-gray-600 transition-colors"
+                          >
+                              Start a New Plan
+                          </button>
+                           <button
+                              onClick={handleGenerateVideoOverview}
+                              disabled={isVideoGenerating}
+                              className="px-6 py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-500 transition-colors disabled:opacity-50"
+                            >
+                                Generate Video Overview
+                            </button>
+                          <DropdownButton
+                            label="Download PDFs"
+                            isLoading={isGeneratingPdf}
+                            progress={pdfProgress}
+                            options={[
+                                { label: 'Full Playbook', onClick: () => prepareAndDownloadPdf('full') },
+                                { label: 'Concepts Guide', onClick: () => prepareAndDownloadPdf('concepts-guide') },
+                                { label: 'Money Models Guide', onClick: () => prepareAndDownloadPdf('money-models-guide') },
+                                { label: 'Offer Presentation Slides', onClick: () => prepareAndDownloadPdf('offer-presentation') },
+                                { label: 'Business Scorecard (KPIs)', onClick: () => prepareAndDownloadPdf('kpi-dashboard') },
+                                { label: 'High-Converting Landing Page', onClick: () => prepareAndDownloadPdf('landing-page') },
+                                { label: 'Simple Offer Flyer', onClick: () => prepareAndDownloadPdf('downsell-pamphlet') },
+                                { label: 'Customer Follow-Up Note', onClick: () => prepareAndDownloadPdf('tripwire-followup') },
+                                { label: 'Your Money Making Plan', onClick: () => prepareAndDownloadPdf('cfa-model') },
+                            ]}
+                          />
+                          <button
+                              onClick={handleDownloadAll}
+                              disabled={isZipping || isGeneratingPdf}
+                              className="px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-400 transition-colors transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                             Download Full Kit (.zip)
+                          </button>
+                          <button
+                              onClick={handleDownloadHtmlPage}
+                              className="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-400 transition-colors"
+                          >
+                             Download Offline Page
+                          </button>
+                      </div>
+                  </header>
+                  <FullPlaybook 
+                    playbook={playbook} 
+                    onDownloadAsset={prepareAndDownloadAssetPdf}
+                    onPreviewAsset={handlePreviewAsset}
+                    isAnyPdfGenerating={isGeneratingPdf || isZipping}
+                    generatingAsset={generatingAsset}
+                    onDownloadAllAssets={prepareAndDownloadAssetBundlePdf}
+                    generatingAssetBundleFor={generatingAssetBundleFor}
+                    chatHistory={chatHistory}
+                    isChatLoading={isChatLoading}
+                    onSendMessage={handleSendMessage}
+                    pdfProgress={pdfProgress}
+                  />
+              </div>
+          </div>
+      );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl">
+        <Step1Form onSubmit={handleFormSubmit} />
+      </div>
+    </div>
+  );
+};
+
+export default App;
