@@ -97,9 +97,9 @@ const MoneyModelsGuidePdf: React.FC = () => {
                 <SectionTitle>CFA, Money Models: Introducing Client Financed Acquisition</SectionTitle>
                 <P>Client Financed Acquisition (CFA) is when the gross profit from a single client within the first 30 days is greater than the cost of acquiring that customer. This leads to three levels of advertising mastery:</P>
                 <OL items={[
-                    <><strong>Level 1: The Viable Business (LTGP>CAC):</strong> Profitable over time, but may be cash-flow constrained.</>,
-                    <><strong>Level 2: The Self-Funding Business (30-Day GP>CAC):</strong> Acquiring customers for free, limited only by credit line.</>,
-                    <><strong>Level 3: The Compounding Business (30-Day GP>2xCAC):</strong> Each customer pays for themselves and the next customer, removing all financial limits to growth.</>
+                    <><strong>Level 1: The Viable Business (LTGP&gt;CAC):</strong> Profitable over time, but may be cash-flow constrained.</>,
+                    <><strong>Level 2: The Self-Funding Business (30-Day GP&gt;CAC):</strong> Acquiring customers for free, limited only by credit line.</>,
+                    <><strong>Level 3: The Compounding Business (30-Day GP&gt;2xCAC):</strong> Each customer pays for themselves and the next customer, removing all financial limits to growth.</>
                 ]} />
                 
                 <SectionTitle>4 Types of Offers: The Four-Pronged Framework</SectionTitle>
