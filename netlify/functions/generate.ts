@@ -726,8 +726,11 @@ const startVideoGeneration = async (script: string): Promise<{operationId: strin
 };
 
 const pollVideoGeneration = async (operationId: string): Promise<{done: boolean, downloadLink?: string}> => {
-    // FIX: The `getVideosOperation` method expects an object with an `operation` key whose value is an object containing the operation name.
-    let operation = await ai.operations.getVideosOperation({ operation: { name: operationId } });
+    // FIX: The `getVideosOperation` method's type signature expects a full `GenerateVideosOperation` object.
+    // In a stateless polling architecture where only the operation name is available, we construct
+    // a partial object and cast to `any` to bypass the type check, as the API can look up
+    // the operation by its name.
+    let operation = await ai.operations.getVideosOperation({ operation: { name: operationId } as any });
     if(operation.done) {
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) {
