@@ -418,6 +418,7 @@ const generate = async <T>(prompt: string, schema: any): Promise<T> => {
             model: 'gemini-2.5-flash',
             contents: prompt,
             config: {
+                systemInstruction: hormoziMonetizationEngine,
                 responseMimeType: "application/json",
                 responseSchema: schema,
             },
@@ -452,12 +453,9 @@ IMPORTANT: Tailor your advice for someone at the very beginning of their journey
     }
 
     return `
-You are Hormozi AI, an expert business consultant. Your advice is practical, actionable, and always customer-centric. You will use the following framework to analyze the business and generate the requested output.
+You are Hormozi AI, an expert business consultant. Your advice is practical, actionable, and always customer-centric. You will analyze the business based on the comprehensive framework provided in the system instruction and generate the requested output.
 
-Framework Overview:
-${hormoziMonetizationEngine}
-
-Analyze the following business and generate the requested output in the specified JSON format. Do not include any explanatory text before or after the JSON.
+Analyze the following business data and generate the requested output in the specified JSON format. Do not include any explanatory text before or after the JSON.
 
 Business Situation:
 ${businessStageContext}

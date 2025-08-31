@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('Starting...');
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   const [pdfProgress, setPdfProgress] = useState(0);
   const [zipProgress, setZipProgress] = useState(0);
@@ -52,6 +53,21 @@ const App: React.FC = () => {
 
   const pdfSingleRenderRef = useRef<HTMLDivElement>(null);
   const pdfAssetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let timer: number;
+    if (isLoading) {
+      setElapsedTime(0);
+      timer = window.setInterval(() => {
+        setElapsedTime(prevTime => prevTime + 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [isLoading]);
 
   const handleFormSubmit = useCallback(async (data: BusinessData) => {
     setIsLoading(true);
@@ -587,12 +603,29 @@ const App: React.FC = () => {
   }, [isGeneratingPdf, pdfType, assetForPdf, assetBundleForPdf, playbook]);
 
   if (isLoading) {
+    const AVERAGE_TIME_PER_STEP_SECONDS = 8;
+    const TOTAL_STEPS = 12;
+    const estimatedTotalTime = TOTAL_STEPS * AVERAGE_TIME_PER_STEP_SECONDS;
+    const timeRemaining = Math.max(0, estimatedTotalTime - elapsedTime);
+
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+
+    let timeRemainingText = '';
+    if (loadingProgress < 5) {
+        timeRemainingText = `Estimating time...`;
+    } else if (timeRemaining > 0 && loadingProgress < 100) {
+        timeRemainingText = `About ${minutes > 0 ? `${minutes}m ` : ''}${seconds.toString().padStart(2, '0')}s remaining`;
+    } else if (loadingProgress < 100) {
+        timeRemainingText = `Finishing up...`;
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-lg text-center">
             <h2 className="text-3xl font-black text-white mb-4">Building Your Plan...</h2>
             <p className="text-gray-400 mb-8">Your AI assistant is analyzing your business and crafting your custom growth plan. This might take a moment.</p>
-            <ProgressBar progress={loadingProgress} loadingText={loadingText} />
+            <ProgressBar progress={loadingProgress} loadingText={loadingText} timeRemainingText={timeRemainingText} />
         </div>
       </div>
     );
